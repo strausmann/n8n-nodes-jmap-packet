@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-jmap-packet",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "JMAP nodes for n8n — mail, mailboxes and threads over JMAP (RFC 8620/8621). Works with Stalwart, Apache James, Twake Mail and Fastmail.",
   "keywords": [
     "n8n-community-node-package",

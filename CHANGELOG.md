@@ -1,3 +1,9 @@
+## [1.0.1](https://github.com/strausmann/n8n-nodes-jmap-packet/compare/v1.0.0...v1.0.1) (2026-09-13)
+
+### Bug Fixes
+
+* **release:** stop commenting on issues this repository does not have ([5cec681](https://github.com/strausmann/n8n-nodes-jmap-packet/commit/5cec6810700d2c3464afdc65722a15ac32eaad20))
+
 ## 1.0.0 (2026-09-13)
 
 ### Features

@@ -11,7 +11,7 @@ export default defineConfig({
 			// Ratchet, not a target. These numbers are the coverage that exists today;
 			// they are here to stop it getting worse, and are meant to be raised as
 			// tests are added — never lowered to make a red run green.
-			thresholds: { lines: 46, functions: 45, branches: 45, statements: 46 },
+			thresholds: { lines: 49, functions: 51, branches: 46, statements: 49 },
 		},
 	},
 });

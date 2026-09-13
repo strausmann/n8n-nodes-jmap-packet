@@ -2,6 +2,8 @@ import type {
 	IExecuteFunctions,
 	ILoadOptionsFunctions,
 	IPollFunctions,
+	IHookFunctions,
+	IWebhookFunctions,
 	IDataObject,
 	JsonObject,
 	IHttpRequestMethods,
@@ -10,6 +12,19 @@ import type {
 	IBinaryData,
 } from 'n8n-workflow';
 import { NodeApiError, NodeOperationError } from 'n8n-workflow';
+
+/**
+ * Every n8n context this module can be called from: the action node, option
+ * loading, the polling trigger, and the activation hooks and webhook handler of
+ * the push trigger. They differ in what else they offer, but all of them can
+ * make an authenticated request, which is all this module needs.
+ */
+export type JmapContext =
+	| IExecuteFunctions
+	| ILoadOptionsFunctions
+	| IPollFunctions
+	| IHookFunctions
+	| IWebhookFunctions;
 
 export interface IJmapSession {
 	accounts: { [key: string]: IJmapAccount };
@@ -53,7 +68,7 @@ export const JMAP_CAPABILITIES = {
 /**
  * Get the authentication type from node parameters
  */
-function getAuthType(context: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions): string {
+function getAuthType(context: JmapContext): string {
 	try {
 		return context.getNodeParameter('authentication', 0) as string;
 	} catch {
@@ -65,7 +80,7 @@ function getAuthType(context: IExecuteFunctions | ILoadOptionsFunctions | IPollF
  * Get JMAP server URL based on credential type
  */
 async function getServerUrl(
-	context: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	context: JmapContext,
 ): Promise<string> {
 	const authType = getAuthType(context);
 
@@ -90,7 +105,7 @@ async function getServerUrl(
  * Make an authenticated JMAP request
  */
 async function makeJmapRequest(
-	context: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	context: JmapContext,
 	method: IHttpRequestMethods,
 	endpoint: string,
 	body?: IDataObject,
@@ -173,7 +188,7 @@ export function buildEmailFilter(options: IDataObject, filter: IDataObject = {})
  * Get JMAP session from the server
  */
 export async function getJmapSession(
-	this: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	this: JmapContext,
 ): Promise<IJmapSession> {
 	const cached = sessionCache.get(this);
 	if (cached !== undefined) {
@@ -206,7 +221,7 @@ export async function getJmapSession(
  * normal and carries no on-path attacker worth the name.
  */
 function assertSecureServerUrl(
-	context: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	context: JmapContext,
 	serverUrl: string,
 ): void {
 	let parsed: URL;
@@ -257,7 +272,7 @@ function assertSecureServerUrl(
  * a domain points at a provider on another host.
  */
 async function getApiUrl(
-	context: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	context: JmapContext,
 ): Promise<string> {
 	const serverUrl = await getServerUrl(context);
 
@@ -278,7 +293,7 @@ async function getApiUrl(
  * Make a JMAP API request
  */
 export async function jmapApiRequest(
-	this: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	this: JmapContext,
 	methodCalls: [string, IDataObject, string][],
 	using: string[] = [JMAP_CAPABILITIES.CORE, JMAP_CAPABILITIES.MAIL],
 ): Promise<IJmapResponse> {
@@ -306,7 +321,7 @@ export async function jmapApiRequest(
  * Get the primary account ID for mail
  */
 export async function getPrimaryAccountId(
-	this: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	this: JmapContext,
 ): Promise<string> {
 	const session = await getJmapSession.call(this);
 	const mailCapability = JMAP_CAPABILITIES.MAIL;
@@ -327,7 +342,7 @@ export async function getPrimaryAccountId(
  * Get all mailboxes for an account
  */
 export async function getMailboxes(
-	this: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	this: JmapContext,
 	accountId: string,
 ): Promise<IDataObject[]> {
 	const response = await jmapApiRequest.call(
@@ -347,7 +362,7 @@ export async function getMailboxes(
  * Find a mailbox by name
  */
 export async function findMailboxByName(
-	this: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	this: JmapContext,
 	accountId: string,
 	name: string,
 ): Promise<IDataObject | undefined> {
@@ -359,7 +374,7 @@ export async function findMailboxByName(
  * Find a mailbox by role
  */
 export async function findMailboxByRole(
-	this: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	this: JmapContext,
 	accountId: string,
 	role: string,
 ): Promise<IDataObject | undefined> {
@@ -371,7 +386,7 @@ export async function findMailboxByRole(
  * Query emails with filters
  */
 export async function queryEmails(
-	this: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	this: JmapContext,
 	accountId: string,
 	filter: IDataObject = {},
 	sort: IDataObject[] = [{ property: 'receivedAt', isAscending: false }],
@@ -405,7 +420,7 @@ export async function queryEmails(
  * Get emails by IDs
  */
 export async function getEmails(
-	this: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	this: JmapContext,
 	accountId: string,
 	ids: string[],
 	properties: string[] = [
@@ -533,7 +548,7 @@ export async function createDraft(
  * Get identities
  */
 export async function getIdentities(
-	this: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	this: JmapContext,
 	accountId: string,
 ): Promise<IDataObject[]> {
 	const response = await jmapApiRequest.call(
@@ -554,7 +569,7 @@ export async function getIdentities(
  * Update email keywords
  */
 export async function updateEmailKeywords(
-	this: IExecuteFunctions | IPollFunctions,
+	this: JmapContext,
 	accountId: string,
 	emailId: string,
 	keywords: IDataObject,
@@ -732,7 +747,7 @@ export async function deleteEmails(
  * Get threads
  */
 export async function getThreads(
-	this: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	this: JmapContext,
 	accountId: string,
 	ids: string[],
 ): Promise<IDataObject[]> {
@@ -915,4 +930,118 @@ export async function getAttachments(
 	}
 
 	return results;
+}
+
+/**
+ * A push subscription as the server stores it (RFC 8620 section 7.2).
+ */
+export interface IJmapPushSubscription {
+	id: string;
+	deviceClientId: string;
+	url: string;
+	types?: string[];
+	verificationCode?: string;
+	expires?: string;
+}
+
+/**
+ * Registers a URL for the server to post state changes to.
+ *
+ * The subscription is inert until it has been verified: the server posts a
+ * PushVerification containing a code, and until that code is sent back nothing
+ * else arrives. See confirmPushSubscription.
+ */
+export async function createPushSubscription(
+	this: IHookFunctions,
+	url: string,
+	deviceClientId: string,
+	types: string[] = ['EmailDelivery', 'Email'],
+): Promise<string> {
+	const response = await jmapApiRequest.call(
+		this,
+		[
+			[
+				'PushSubscription/set',
+				{
+					create: {
+						sub: { deviceClientId, url, types },
+					},
+				},
+				'c0',
+			],
+		],
+		[JMAP_CAPABILITIES.CORE],
+	);
+
+	const created = (response.methodResponses?.[0]?.[1] as IDataObject)?.created as IDataObject;
+	const sub = created?.sub as IDataObject | undefined;
+
+	if (!sub?.id) {
+		const notCreated = (response.methodResponses?.[0]?.[1] as IDataObject)?.notCreated;
+		throw new NodeOperationError(
+			this.getNode(),
+			'The JMAP server refused the push subscription.',
+			{
+				description:
+					`Server response: ${JSON.stringify(notCreated ?? response.methodResponses?.[0])}. ` +
+					'Servers commonly require the URL to use https with a certificate they can verify, ' +
+					'and reject bare IP addresses in favour of a hostname.',
+			},
+		);
+	}
+
+	return sub.id as string;
+}
+
+/**
+ * Answers the server's verification challenge.
+ *
+ * Until this succeeds the subscription delivers nothing — the handshake is what
+ * proves that whoever registered the URL also controls it.
+ */
+export async function confirmPushSubscription(
+	this: IWebhookFunctions,
+	subscriptionId: string,
+	verificationCode: string,
+): Promise<void> {
+	await jmapApiRequest.call(
+		this,
+		[
+			[
+				'PushSubscription/set',
+				{ update: { [subscriptionId]: { verificationCode } } },
+				'c0',
+			],
+		],
+		[JMAP_CAPABILITIES.CORE],
+	);
+}
+
+/**
+ * Removes the subscription. Called when the workflow is deactivated, so the
+ * server stops posting to a URL that no longer listens.
+ */
+export async function deletePushSubscription(
+	this: IHookFunctions,
+	subscriptionId: string,
+): Promise<void> {
+	await jmapApiRequest.call(
+		this,
+		[['PushSubscription/set', { destroy: [subscriptionId] }, 'c0']],
+		[JMAP_CAPABILITIES.CORE],
+	);
+}
+
+/**
+ * Whether the server announces support for a capability in its session.
+ *
+ * Asking beats assuming: the session is where a server states what it can do,
+ * and a node that reads it stays honest against the next server.
+ */
+export async function hasCapability(
+	this: JmapContext,
+	capability: string,
+): Promise<boolean> {
+	const session = await getJmapSession.call(this);
+	return Object.keys(session.capabilities ?? {}).includes(capability);
 }

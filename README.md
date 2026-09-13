@@ -120,6 +120,42 @@ Scope:             openid email profile offline_access
 
 ---
 
+## Choosing a trigger
+
+Two triggers, and the polling one is the right default.
+
+| | **JMAP Trigger** (polling) | **JMAP Push Trigger** |
+|---|---|---|
+| How it learns of new mail | asks every few minutes | the server posts to a URL |
+| Needs n8n reachable from the mail server | no | **yes** |
+| Latency | the poll interval | seconds |
+| Setup | credential only | credential plus a reachable https URL |
+
+**Polling needs nothing from your network** beyond an outbound connection, which is why it is the
+default. Push is worth it when the delay matters — an inbox that feeds a ticket system, a scan
+folder someone is waiting on.
+
+### What push requires
+
+The mail server has to be able to reach the URL n8n offers for this workflow, over `https`, with a
+certificate it accepts. JMAP servers commonly refuse a bare IP address and want a hostname; if you
+are on Tailscale, `tailscale cert` issues a real certificate for your MagicDNS name, which works.
+Set `N8N_WEBHOOK_URL` so n8n hands out the address the mail server can actually use.
+
+The node refuses to register anything that is not `https` rather than letting the server reject it
+later with a message you would have to go looking for.
+
+There is also a handshake: on registration the server posts a verification code, which the node
+echoes back. Until that completes nothing else arrives. It happens on its own — worth knowing only
+because it explains why the first message after activating a workflow is not an email.
+
+### What a push actually delivers
+
+A push says *something changed*, never *what*. On a state change the node fetches the mail, exactly
+as the polling trigger does, with the same bookkeeping about what was already handed over. Push
+replaces the clock, not the work — so both triggers behave identically about which mail counts as
+new, and neither emits the existing mailbox contents when a workflow is switched on.
+
 ## Transport security
 
 **The server URL must use `https`.** A credential pointing at `http://` is refused, with the

@@ -15,13 +15,13 @@
     "rfc8621"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/strausmann/n8n-nodes-jmap/tree/vendor/strausmann",
+  "homepage": "https://github.com/strausmann/n8n-nodes-jmap-packet",
   "author": {
     "name": "Björn Strausmann"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/strausmann/n8n-nodes-jmap.git"
+    "url": "git+https://github.com/strausmann/n8n-nodes-jmap-packet.git"
   },
   "main": "index.js",
   "scripts": {
@@ -66,5 +66,8 @@
       "url": "https://github.com/mmaudet",
       "comment": "original author of n8n-nodes-jmap, which this package is based on"
     }
-  ]
+  ],
+  "bugs": {
+    "url": "https://github.com/strausmann/n8n-nodes-jmap-packet/issues"
+  }
 }

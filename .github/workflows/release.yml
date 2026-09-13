@@ -29,7 +29,10 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-          registry-url: https://registry.npmjs.org
+          # Deliberately no registry-url: it makes setup-node write an .npmrc
+          # referencing NODE_AUTH_TOKEN, which is unset here, so npm whoami
+          # fails and semantic-release reports EINVALIDNPMTOKEN even though
+          # NPM_TOKEN is valid. semantic-release writes its own auth config.
 
       - name: Upgrade npm for OIDC trusted publishing
         # Node 22 ships npm 10.x; OIDC trusted publishing needs npm >= 11.5.1.

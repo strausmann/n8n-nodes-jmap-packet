@@ -19,7 +19,7 @@ import {
 
 export class JmapTrigger implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'JMAP Trigger',
+		displayName: 'JMAP Trigger (Strausmann)',
 		name: 'jmapTrigger',
 		icon: 'file:jmap.svg',
 		group: ['trigger'],
@@ -33,29 +33,29 @@ export class JmapTrigger implements INodeType {
 		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
-				name: 'jmapBasicAuthApi',
+				name: 'strausmannJmapBasicAuthApi',
 				required: true,
 				displayOptions: {
 					show: {
-						authentication: ['jmapBasicAuthApi'],
+						authentication: ['strausmannJmapBasicAuthApi'],
 					},
 				},
 			},
 			{
-				name: 'jmapBearerTokenApi',
+				name: 'strausmannJmapBearerTokenApi',
 				required: true,
 				displayOptions: {
 					show: {
-						authentication: ['jmapBearerTokenApi'],
+						authentication: ['strausmannJmapBearerTokenApi'],
 					},
 				},
 			},
 			{
-				name: 'jmapOAuth2Api',
+				name: 'strausmannJmapOAuth2Api',
 				required: true,
 				displayOptions: {
 					show: {
-						authentication: ['jmapOAuth2Api'],
+						authentication: ['strausmannJmapOAuth2Api'],
 					},
 				},
 			},
@@ -70,18 +70,18 @@ export class JmapTrigger implements INodeType {
 				options: [
 					{
 						name: 'OAuth2',
-						value: 'jmapOAuth2Api',
+						value: 'strausmannJmapOAuth2Api',
 					},
 					{
 						name: 'Basic Auth',
-						value: 'jmapBasicAuthApi',
+						value: 'strausmannJmapBasicAuthApi',
 					},
 					{
 						name: 'Bearer Token',
-						value: 'jmapBearerTokenApi',
+						value: 'strausmannJmapBearerTokenApi',
 					},
 				],
-				default: 'jmapOAuth2Api',
+				default: 'strausmannJmapOAuth2Api',
 				description: 'Authentication method to use',
 			},
 			{

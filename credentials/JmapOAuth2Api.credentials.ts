@@ -6,8 +6,8 @@ import type { ICredentialType, INodeProperties, Icon } from 'n8n-workflow';
  * Uses Authorization Code Flow with PKCE (public client, no secret required)
  */
 export class JmapOAuth2Api implements ICredentialType {
-	name = 'jmapOAuth2Api';
-	displayName = 'JMAP OAuth2 API';
+	name = 'strausmannJmapOAuth2Api';
+	displayName = 'JMAP OAuth2 API (Strausmann)';
 	documentationUrl = 'https://jmap.io/spec-core.html';
 	extends = ['oAuth2Api'];
 

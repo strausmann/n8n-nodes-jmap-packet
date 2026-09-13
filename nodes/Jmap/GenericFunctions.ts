@@ -1045,3 +1045,66 @@ export async function hasCapability(
 	const session = await getJmapSession.call(this);
 	return Object.keys(session.capabilities ?? {}).includes(capability);
 }
+
+/**
+ * The account's current Email state string.
+ *
+ * The state is the marker a later /changes call is measured against. It is
+ * taken from an Email/get response, which is where the spec says it lives.
+ */
+export async function getEmailState(this: JmapContext, accountId: string): Promise<string> {
+	const response = await jmapApiRequest.call(this, [
+		['Email/get', { accountId, ids: [], properties: ['id'] }, 'c0'],
+	]);
+
+	const state = (response.methodResponses?.[0]?.[1] as IDataObject)?.state;
+
+	if (typeof state !== 'string') {
+		throw new NodeOperationError(
+			this.getNode(),
+			'The JMAP server did not return an Email state, so changes cannot be tracked.',
+		);
+	}
+
+	return state;
+}
+
+/**
+ * The ids that changed since a given state — created, updated and destroyed.
+ *
+ * This is what a push notification is for. The notification itself carries only
+ * a state string (RFC 8620 section 7.1), and the spec points here to turn that
+ * into the actual ids: no timestamps, no window, no guessing which messages the
+ * notification meant.
+ *
+ * A server may cap how much it returns, in which case `hasMoreChanges` is set
+ * and the caller asks again from the new state.
+ */
+export async function getEmailChanges(
+	this: JmapContext,
+	accountId: string,
+	sinceState: string,
+	maxChanges = 100,
+): Promise<{ created: string[]; updated: string[]; destroyed: string[]; newState: string; hasMoreChanges: boolean }> {
+	const response = await jmapApiRequest.call(this, [
+		['Email/changes', { accountId, sinceState, maxChanges }, 'c0'],
+	]);
+
+	const result = response.methodResponses?.[0]?.[1] as IDataObject | undefined;
+
+	if (!result || typeof result.newState !== 'string') {
+		throw new NodeOperationError(
+			this.getNode(),
+			'The JMAP server did not answer Email/changes with a new state.',
+			{ description: `Server response: ${JSON.stringify(response.methodResponses?.[0])}` },
+		);
+	}
+
+	return {
+		created: (result.created as string[]) ?? [],
+		updated: (result.updated as string[]) ?? [],
+		destroyed: (result.destroyed as string[]) ?? [],
+		newState: result.newState,
+		hasMoreChanges: result.hasMoreChanges === true,
+	};
+}

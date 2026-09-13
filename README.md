@@ -149,12 +149,26 @@ There is also a handshake: on registration the server posts a verification code,
 echoes back. Until that completes nothing else arrives. It happens on its own — worth knowing only
 because it explains why the first message after activating a workflow is not an email.
 
+**If n8n sits behind an authenticating reverse proxy** — SSO, an OIDC gateway, HTTP basic auth —
+the mail server cannot get past it. It is not a browser, it has no session, and it will be handed
+a login page instead of your workflow; the subscription then never finishes verifying and no push
+ever arrives. Exempt the webhook path from authentication: `/webhook/*`, and `/webhook-test/*` as
+well if you want manual test executions to receive pushes. The alternative is to give
+`N8N_WEBHOOK_URL` an address that does not pass through the proxy at all.
+
 ### What a push actually delivers
 
-A push says *something changed*, never *what*. On a state change the node fetches the mail, exactly
-as the polling trigger does, with the same bookkeeping about what was already handed over. Push
-replaces the clock, not the work — so both triggers behave identically about which mail counts as
-new, and neither emits the existing mailbox contents when a workflow is switched on.
+A push carries a state string, not a message. RFC 8620 section 7.1 is explicit about this: a
+`StateChange` notification says *which types moved*, and points at the `/changes` methods to find
+out what that means.
+
+So the node asks. On a notification it calls `Email/changes` with the state it last recorded, gets
+back the ids that were created, and fetches those. No timestamp is involved anywhere — two
+messages arriving in the same second cannot hide each other, and a server that caps its answer
+sets `hasMoreChanges`, which the node pages through rather than silently truncating.
+
+The state is recorded when the subscription is registered, so switching a workflow on does not
+hand you the mailbox you already have.
 
 ## Transport security
 

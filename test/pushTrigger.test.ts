@@ -19,6 +19,14 @@ vi.mock('../nodes/Jmap/GenericFunctions', async () => {
 		confirmPushSubscription: vi.fn(async () => undefined),
 		deletePushSubscription: vi.fn(async () => undefined),
 		hasCapability: vi.fn(async () => true),
+		getEmailState: vi.fn(async () => 'state-0'),
+		getEmailChanges: vi.fn(async () => ({
+			created: [],
+			updated: [],
+			destroyed: [],
+			newState: 'state-1',
+			hasMoreChanges: false,
+		})),
 		updateEmailKeywords: vi.fn(async () => ({})),
 	};
 });
@@ -69,8 +77,9 @@ describe('registering the subscription', () => {
 
 		expect(GF.createPushSubscription).toHaveBeenCalledTimes(1);
 		expect(state.pushSubscriptionId).toBe('sub-1');
-		// No backlog: the mailbox as it stands is not "new".
-		expect(state.lastProcessedTime).toBeTruthy();
+		// The account's current state is the marker everything is measured
+		// against — no backlog, and no timestamp anywhere.
+		expect(state.emailState).toBe('state-0');
 		expect(state.pushVerified).toBe(false);
 	});
 
@@ -112,20 +121,71 @@ describe('handling what the server posts', () => {
 		expect(GF.queryEmails).not.toHaveBeenCalled();
 	});
 
-	it('fetches on a state change, because a push never carries the mail', async () => {
-		(GF.queryEmails as any).mockResolvedValueOnce({ ids: ['e1'], total: 1 });
+	it('asks which ids changed, rather than guessing from a timestamp', async () => {
+		(GF.getEmailChanges as any).mockResolvedValueOnce({
+			created: ['e1'],
+			updated: [],
+			destroyed: [],
+			newState: 'state-7',
+			hasMoreChanges: false,
+		});
 		(GF.getEmails as any).mockResolvedValueOnce([
 			{ id: 'e1', receivedAt: '2026-01-01T10:00:00Z', subject: 'hello', keywords: {} },
 		]);
 
 		const node = new JmapPushTrigger();
-		const state: Record<string, unknown> = { lastProcessedTime: '2026-01-01T09:00:00Z' };
+		const state: Record<string, unknown> = { emailState: 'state-3' };
 		const ctx = webhookCtx({ '@type': 'StateChange', changed: { acc: { Email: 's1' } } }, state);
 
 		const result = await node.webhook.call(ctx as any);
 
-		expect(GF.queryEmails).toHaveBeenCalledTimes(1);
+		expect(GF.getEmailChanges).toHaveBeenCalledWith('acc', 'state-3');
+		expect(GF.getEmails).toHaveBeenCalledWith('acc', ['e1'], expect.anything(), false, false);
 		expect(result.workflowData?.[0]).toHaveLength(1);
-		expect(state.lastProcessedTime).toBe('2026-01-01T10:00:00Z');
+		// The state moves to what the server reported, so the next push starts there.
+		expect(state.emailState).toBe('state-7');
+	});
+
+	it('keeps asking while the server reports more changes than it returned', async () => {
+		(GF.getEmailChanges as any)
+			.mockResolvedValueOnce({
+				created: ['e1'],
+				updated: [],
+				destroyed: [],
+				newState: 'state-4',
+				hasMoreChanges: true,
+			})
+			.mockResolvedValueOnce({
+				created: ['e2'],
+				updated: [],
+				destroyed: [],
+				newState: 'state-5',
+				hasMoreChanges: false,
+			});
+		(GF.getEmails as any).mockResolvedValueOnce([
+			{ id: 'e1', receivedAt: '2026-01-01T10:00:00Z', keywords: {} },
+			{ id: 'e2', receivedAt: '2026-01-01T10:00:01Z', keywords: {} },
+		]);
+
+		const node = new JmapPushTrigger();
+		const state: Record<string, unknown> = { emailState: 'state-3' };
+		const ctx = webhookCtx({ '@type': 'StateChange' }, state);
+
+		const result = await node.webhook.call(ctx as any);
+
+		expect(GF.getEmailChanges).toHaveBeenCalledTimes(2);
+		expect(GF.getEmails).toHaveBeenCalledWith('acc', ['e1', 'e2'], expect.anything(), false, false);
+		expect(result.workflowData?.[0]).toHaveLength(2);
+		expect(state.emailState).toBe('state-5');
+	});
+
+	it('does nothing when it has no state to measure against', async () => {
+		const node = new JmapPushTrigger();
+		const ctx = webhookCtx({ '@type': 'StateChange' }, {});
+
+		const result = await node.webhook.call(ctx as any);
+
+		expect(result.workflowData).toBeUndefined();
+		expect(GF.getEmailChanges).not.toHaveBeenCalled();
 	});
 });

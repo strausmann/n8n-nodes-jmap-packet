@@ -17,6 +17,8 @@ import {
 	getEmails,
 	buildEmailFilter,
 	createPushSubscription,
+	getEmailState,
+	getEmailChanges,
 	confirmPushSubscription,
 	deletePushSubscription,
 	hasCapability,
@@ -221,9 +223,11 @@ export class JmapPushTrigger implements INodeType {
 					);
 				}
 
-				// Watching from now, not from whatever is already in the mailbox.
-				staticData.lastProcessedTime = new Date().toISOString();
-				staticData.lastProcessedIds = [];
+				// Remember the state the account is in right now. Everything that
+				// follows is measured against it, so what is already in the mailbox
+				// is not "new" — and no timestamp is involved anywhere.
+				const accountId = await getPrimaryAccountId.call(this);
+				staticData.emailState = await getEmailState.call(this, accountId);
 
 				const deviceClientId = `n8n-${this.getNode().id ?? 'jmap'}`;
 				staticData.pushSubscriptionId = await createPushSubscription.call(
@@ -287,26 +291,54 @@ export class JmapPushTrigger implements INodeType {
 		const mailbox = this.getNodeParameter('mailbox', '') as string;
 
 		const accountId = await getPrimaryAccountId.call(this);
+		const sinceState = staticData.emailState as string | undefined;
 
+		if (!sinceState) {
+			// No state means the subscription was never registered by this node.
+			// Fetching everything would be worse than fetching nothing.
+			return { noWebhookResponse: false, workflowData: undefined };
+		}
+
+		// Ask the server which messages changed, rather than guessing from a
+		// timestamp. The push told us the state moved; this turns that into ids.
+		// A capped answer sets hasMoreChanges, and the loop continues from the
+		// state the server just gave us, so nothing falls between two pages.
+		const createdIds: string[] = [];
+		let state = sinceState;
+
+		for (let page = 0; page < 10; page++) {
+			const changes = await getEmailChanges.call(this, accountId, state);
+			createdIds.push(...changes.created);
+			state = changes.newState;
+			if (!changes.hasMoreChanges) break;
+		}
+
+		staticData.emailState = state;
+
+		if (createdIds.length === 0) return { noWebhookResponse: false, workflowData: undefined };
+
+		let selectedIds = createdIds;
+
+		// Filters stay server-side: asking the server which of these ids match
+		// keeps the same search semantics the polling trigger has, instead of
+		// reimplementing "contains" in here and quietly disagreeing with it.
 		const filter: IDataObject = {};
 		if (mailbox) filter.inMailbox = mailbox;
 		buildEmailFilter(filters, filter);
 
-		// A push says something changed, never what. The fetch below is the same
-		// one the polling trigger does, including the bookkeeping that keeps a
-		// timestamp collision from losing or duplicating a message.
-		const lastProcessedTime = staticData.lastProcessedTime as string | undefined;
-		if (lastProcessedTime) filter.after = lastProcessedTime;
+		if (Object.keys(filter).length > 0) {
+			const matching = await queryEmails.call(
+				this,
+				accountId,
+				filter,
+				[{ property: 'receivedAt', isAscending: true }],
+				Math.max(createdIds.length, 50),
+			);
+			const allowed = new Set(matching.ids);
+			selectedIds = createdIds.filter((id) => allowed.has(id));
+		}
 
-		const { ids } = await queryEmails.call(
-			this,
-			accountId,
-			filter,
-			[{ property: 'receivedAt', isAscending: true }],
-			100,
-		);
-
-		if (ids.length === 0) return { noWebhookResponse: false, workflowData: undefined };
+		if (selectedIds.length === 0) return { noWebhookResponse: false, workflowData: undefined };
 
 		const properties = [
 			'id',
@@ -322,39 +354,8 @@ export class JmapPushTrigger implements INodeType {
 			'hasAttachment',
 		];
 
-		const emails = await getEmails.call(this, accountId, ids, properties, !simple, !simple);
-		if (emails.length === 0) return { noWebhookResponse: false, workflowData: undefined };
-
-		const lastProcessedIds = new Set((staticData.lastProcessedIds as string[]) ?? []);
-		let newEmails = emails;
-
-		if (lastProcessedTime) {
-			const lastTime = new Date(lastProcessedTime).getTime();
-			newEmails = emails.filter((email) => {
-				const emailTime = new Date(email.receivedAt as string).getTime();
-				if (emailTime > lastTime) return true;
-				if (emailTime < lastTime) return false;
-				return !lastProcessedIds.has(email.id as string);
-			});
-		}
-
+		const newEmails = await getEmails.call(this, accountId, selectedIds, properties, !simple, !simple);
 		if (newEmails.length === 0) return { noWebhookResponse: false, workflowData: undefined };
-
-		const newestDelivered = newEmails[newEmails.length - 1];
-		const newWatermark = newestDelivered.receivedAt as string;
-		const newWatermarkTime = new Date(newWatermark).getTime();
-
-		const deliveredAtWatermark = newEmails
-			.filter((email) => new Date(email.receivedAt as string).getTime() === newWatermarkTime)
-			.map((email) => email.id as string);
-
-		const carriedOver =
-			lastProcessedTime && new Date(lastProcessedTime).getTime() === newWatermarkTime
-				? [...lastProcessedIds]
-				: [];
-
-		staticData.lastProcessedTime = newWatermark;
-		staticData.lastProcessedIds = [...new Set([...carriedOver, ...deliveredAtWatermark])];
 
 		const returnData = newEmails.map((email) => {
 			if (!simple) return { json: email };

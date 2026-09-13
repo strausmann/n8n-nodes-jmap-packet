@@ -799,8 +799,11 @@ interface IJmapAttachment {
 /**
  * Check if a MIME type matches a filter pattern
  */
-function matchesMimeType(mimeType: string, filter: string): boolean {
-	const normalizedMime = mimeType.toLowerCase();
+function matchesMimeType(mimeType: string | undefined, filter: string): boolean {
+	// A server that omits the type gets treated as "does not match" rather than
+	// crashing the run. The filter only ever narrows the selection, so failing
+	// closed here loses an attachment at worst — it never smuggles one in.
+	const normalizedMime = (mimeType ?? '').toLowerCase();
 	const normalizedFilter = filter.toLowerCase().trim();
 
 	if (normalizedFilter.endsWith('/*')) {

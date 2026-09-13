@@ -83,6 +83,29 @@ describe('registering the subscription', () => {
 		expect(state.pushVerified).toBe(false);
 	});
 
+	it('treats a subscription that never completed the handshake as absent', async () => {
+		// Otherwise a handshake that never arrived — n8n was down, the static
+		// state was lost — leaves a workflow that looks registered and never
+		// fires. Reporting it as absent makes n8n register a fresh one.
+		const node = new JmapPushTrigger();
+		const ctx = hookCtx('https://workflows.example.com/webhook/abc', {
+			pushSubscriptionId: 'sub-1',
+			pushVerified: false,
+		});
+
+		await expect(node.webhookMethods.default.checkExists.call(ctx as any)).resolves.toBe(false);
+	});
+
+	it('reports a verified subscription as present', async () => {
+		const node = new JmapPushTrigger();
+		const ctx = hookCtx('https://workflows.example.com/webhook/abc', {
+			pushSubscriptionId: 'sub-1',
+			pushVerified: true,
+		});
+
+		await expect(node.webhookMethods.default.checkExists.call(ctx as any)).resolves.toBe(true);
+	});
+
 	it('removes the subscription when the workflow is deactivated', async () => {
 		const node = new JmapPushTrigger();
 		const state: Record<string, unknown> = { pushSubscriptionId: 'sub-1' };
@@ -111,6 +134,61 @@ describe('handling what the server posts', () => {
 		expect(result.workflowData).toBeUndefined();
 	});
 
+	it('answers a verification that omits the subscription id', async () => {
+		// RFC 8620 section 7.2.2 has the server name the subscription, but a body
+		// without it is still unambiguous: we only ever registered one.
+		const node = new JmapPushTrigger();
+		const state: Record<string, unknown> = { pushSubscriptionId: 'sub-1', pushVerified: false };
+		const ctx = webhookCtx({ '@type': 'PushVerification', verificationCode: 'code-42' }, state);
+
+		await node.webhook.call(ctx as any);
+
+		expect(GF.confirmPushSubscription).toHaveBeenCalledWith('sub-1', 'code-42');
+		expect(state.pushVerified).toBe(true);
+	});
+
+	it('confirms only the subscription it registered, whatever the body claims', async () => {
+		// The webhook URL is the only thing standing between a stranger and this
+		// handler, and it travels through logs, proxies and the workflow export.
+		// A body naming someone else's subscription must not decide which object
+		// we write to with our own credentials — we registered it, we know its id.
+		const node = new JmapPushTrigger();
+		const state: Record<string, unknown> = { pushSubscriptionId: 'sub-1', pushVerified: false };
+		const ctx = webhookCtx(
+			{
+				'@type': 'PushVerification',
+				pushSubscriptionId: 'sub-attacker',
+				verificationCode: 'code-42',
+			},
+			state,
+		);
+
+		const result = await node.webhook.call(ctx as any);
+
+		expect(GF.confirmPushSubscription).not.toHaveBeenCalled();
+		expect(state.pushVerified).toBe(false);
+		expect(result.workflowData).toBeUndefined();
+	});
+
+	it('does not act on a state change before the handshake completed', async () => {
+		// An unverified subscription means nothing has proven it speaks for the
+		// server. It is a weak proof — the code is exchanged once — but it is the
+		// only one the protocol offers, and throwing it away costs nothing.
+		const node = new JmapPushTrigger();
+		const state: Record<string, unknown> = {
+			pushSubscriptionId: 'sub-1',
+			emailState: 'state-0',
+			pushVerified: false,
+		};
+		const ctx = webhookCtx({ '@type': 'StateChange', changed: {} }, state);
+
+		const result = await node.webhook.call(ctx as any);
+
+		expect(GF.getEmailChanges).not.toHaveBeenCalled();
+		expect(state.emailState).toBe('state-0');
+		expect(result.workflowData).toBeUndefined();
+	});
+
 	it('ignores a body that is neither a verification nor a state change', async () => {
 		const node = new JmapPushTrigger();
 		const ctx = webhookCtx({ '@type': 'Something/else' });
@@ -134,7 +212,7 @@ describe('handling what the server posts', () => {
 		]);
 
 		const node = new JmapPushTrigger();
-		const state: Record<string, unknown> = { emailState: 'state-3' };
+		const state: Record<string, unknown> = { emailState: 'state-3', pushVerified: true };
 		const ctx = webhookCtx({ '@type': 'StateChange', changed: { acc: { Email: 's1' } } }, state);
 
 		const result = await node.webhook.call(ctx as any);
@@ -168,7 +246,7 @@ describe('handling what the server posts', () => {
 		]);
 
 		const node = new JmapPushTrigger();
-		const state: Record<string, unknown> = { emailState: 'state-3' };
+		const state: Record<string, unknown> = { emailState: 'state-3', pushVerified: true };
 		const ctx = webhookCtx({ '@type': 'StateChange' }, state);
 
 		const result = await node.webhook.call(ctx as any);

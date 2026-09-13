@@ -197,7 +197,13 @@ export class JmapPushTrigger implements INodeType {
 		default: {
 			async checkExists(this: IHookFunctions): Promise<boolean> {
 				const staticData = this.getWorkflowStaticData('node');
-				return typeof staticData.pushSubscriptionId === 'string';
+				// An unverified subscription is treated as absent, so n8n registers a
+				// fresh one instead of leaving a workflow that never fires. This is
+				// the recovery path for a handshake that never arrived — a lost
+				// static state, an n8n that was down when the server posted.
+				return (
+					typeof staticData.pushSubscriptionId === 'string' && staticData.pushVerified === true
+				);
 			},
 
 			async create(this: IHookFunctions): Promise<boolean> {
@@ -267,11 +273,17 @@ export class JmapPushTrigger implements INodeType {
 		// The verification handshake. Until the code is echoed back the
 		// subscription delivers nothing, so this is not optional plumbing.
 		if (body['@type'] === 'PushVerification') {
-			const subscriptionId =
-				(body.pushSubscriptionId as string) ?? (staticData.pushSubscriptionId as string);
+			// The id comes from what we registered, never from the request. The
+			// webhook URL is the only thing guarding this handler, and it travels
+			// through logs, proxies and workflow exports — so a body naming some
+			// other subscription must not decide which object we write to with our
+			// own credentials. We created it; we know its id. A mismatch means the
+			// post was not meant for us.
+			const subscriptionId = staticData.pushSubscriptionId as string | undefined;
+			const claimedId = body.pushSubscriptionId as string | undefined;
 			const verificationCode = body.verificationCode as string;
 
-			if (subscriptionId && verificationCode) {
+			if (subscriptionId && verificationCode && (!claimedId || claimedId === subscriptionId)) {
 				await confirmPushSubscription.call(this, subscriptionId, verificationCode);
 				staticData.pushVerified = true;
 			}
@@ -282,6 +294,15 @@ export class JmapPushTrigger implements INodeType {
 
 		if (body['@type'] !== 'StateChange') {
 			// Anything else is not ours to act on.
+			return { noWebhookResponse: false, workflowData: undefined };
+		}
+
+		if (staticData.pushVerified !== true) {
+			// Nothing has proven it speaks for the server yet. It is a weak proof —
+			// the code is exchanged once and never again — but it is the only one
+			// the protocol offers here, and discarding it buys nothing. A
+			// subscription stuck unverified is re-registered on the next
+			// activation rather than failing quietly forever; see checkExists.
 			return { noWebhookResponse: false, workflowData: undefined };
 		}
 

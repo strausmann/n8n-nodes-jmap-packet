@@ -149,6 +149,13 @@ There is also a handshake: on registration the server posts a verification code,
 echoes back. Until that completes nothing else arrives. It happens on its own — worth knowing only
 because it explains why the first message after activating a workflow is not an email.
 
+Once the path is reachable, **the webhook URL is the only thing guarding it**. It contains a
+UUID, so it is not guessable, but it is not a secret either: it goes to the mail server, and it
+passes through n8n's own logs, proxy access logs and any workflow export. The node therefore does
+not trust what arrives there. It confirms only the subscription it registered itself — a body
+naming a different one is ignored rather than acted on — and it acts on a state change only after
+the handshake has completed.
+
 **If n8n sits behind an authenticating reverse proxy** — SSO, an OIDC gateway, HTTP basic auth —
 the mail server cannot get past it. It is not a browser, it has no session, and it will be handed
 a login page instead of your workflow; the subscription then never finishes verifying and no push

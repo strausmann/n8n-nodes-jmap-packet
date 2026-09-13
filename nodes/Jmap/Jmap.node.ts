@@ -6,7 +6,6 @@ import {
 	INodeType,
 	INodeTypeDescription,
 	IDataObject,
-	NodeConnectionTypes,
 	NodeOperationError,
 } from 'n8n-workflow';
 
@@ -44,8 +43,8 @@ export class Jmap implements INodeType {
 		defaults: {
 			name: 'JMAP',
 		},
-		inputs: [NodeConnectionTypes.Main],
-		outputs: [NodeConnectionTypes.Main],
+		inputs: ['main'],
+		outputs: ['main'],
 		credentials: [
 			{
 				name: 'jmapPacketBasicAuthApi',
@@ -291,7 +290,7 @@ export class Jmap implements INodeType {
 
 			// Label (mailbox) selection for addLabel/removeLabel
 			{
-				displayName: 'Label',
+				displayName: 'Label Name or ID',
 				name: 'label',
 				type: 'options',
 				typeOptions: {
@@ -305,12 +304,12 @@ export class Jmap implements INodeType {
 					},
 				},
 				default: '',
-				description: 'The label (mailbox) to add or remove',
+				description: 'The label (mailbox) to add or remove. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 
 			// Mailbox selection for getMany
 			{
-				displayName: 'Mailbox',
+				displayName: 'Mailbox Name or ID',
 				name: 'mailbox',
 				type: 'options',
 				typeOptions: {
@@ -323,12 +322,12 @@ export class Jmap implements INodeType {
 					},
 				},
 				default: '',
-				description: 'The mailbox to get emails from',
+				description: 'The mailbox to get emails from. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 
 			// Target mailbox for move
 			{
-				displayName: 'Target Mailbox',
+				displayName: 'Target Mailbox Name or ID',
 				name: 'targetMailbox',
 				type: 'options',
 				typeOptions: {
@@ -342,12 +341,12 @@ export class Jmap implements INodeType {
 					},
 				},
 				default: '',
-				description: 'The mailbox to move the email to',
+				description: 'The mailbox to move the email to. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 
 			// From (sender identity) for send/reply
 			{
-				displayName: 'From',
+				displayName: 'From Name or ID',
 				name: 'fromIdentity',
 				type: 'options',
 				typeOptions: {
@@ -361,7 +360,7 @@ export class Jmap implements INodeType {
 					},
 				},
 				default: '',
-				description: 'The sender identity to use',
+				description: 'The sender identity to use. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 
 			// To recipients
@@ -510,7 +509,6 @@ export class Jmap implements INodeType {
 				type: 'number',
 				typeOptions: {
 					minValue: 1,
-					maxValue: 500,
 				},
 				displayOptions: {
 					show: {

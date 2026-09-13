@@ -49,10 +49,6 @@ function webhookCtx(body: Record<string, unknown>, staticData: Record<string, un
 	};
 }
 
-const create = (JmapPushTrigger.prototype as any).webhookMethods
-	? (JmapPushTrigger.prototype as any).webhookMethods.default.create
-	: undefined;
-
 beforeEach(() => vi.clearAllMocks());
 
 describe('registering the subscription', () => {

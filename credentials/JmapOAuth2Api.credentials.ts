@@ -7,7 +7,7 @@ import type { ICredentialType, INodeProperties, Icon } from 'n8n-workflow';
  */
 export class JmapOAuth2Api implements ICredentialType {
 	name = 'jmapPacketOAuth2Api';
-	displayName = 'JMAP OAuth2 API (Packet)';
+	displayName = 'JMAP (Packet) OAuth2 API';
 	documentationUrl = 'https://jmap.io/spec-core.html';
 	extends = ['oAuth2Api'];
 
@@ -23,7 +23,7 @@ export class JmapOAuth2Api implements ICredentialType {
 			type: 'string',
 			default: '',
 			required: true,
-			placeholder: 'my-client-id',
+			placeholder: 'my-client-ID',
 			hint: 'OIDC Client ID registered with your identity provider',
 		},
 		{
@@ -32,7 +32,6 @@ export class JmapOAuth2Api implements ICredentialType {
 			type: 'string',
 			typeOptions: { password: true },
 			default: '',
-			required: false,
 			hint: 'Leave empty for public clients using PKCE',
 		},
 		{
@@ -48,6 +47,7 @@ export class JmapOAuth2Api implements ICredentialType {
 			displayName: 'Access Token URL',
 			name: 'accessTokenUrl',
 			type: 'string',
+			typeOptions: { password: true },
 			default: '',
 			required: true,
 			placeholder: 'https://sso.example.com/oauth2/token',

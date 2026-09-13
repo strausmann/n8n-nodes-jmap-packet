@@ -8,7 +8,7 @@ import type {
 	ILoadOptionsFunctions,
 	INodePropertyOptions,
 } from 'n8n-workflow';
-import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+import { NodeOperationError } from 'n8n-workflow';
 
 import {
 	getPrimaryAccountId,
@@ -45,7 +45,7 @@ import {
  */
 export class JmapPushTrigger implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'JMAP Push Trigger (Packet)',
+		displayName: 'JMAP Push (Packet) Trigger',
 		name: 'jmapPushTrigger',
 		icon: 'file:jmap.svg',
 		group: ['trigger'],
@@ -55,7 +55,7 @@ export class JmapPushTrigger implements INodeType {
 			name: 'JMAP Push Trigger',
 		},
 		inputs: [],
-		outputs: [NodeConnectionTypes.Main],
+		outputs: ['main'],
 		credentials: [
 			{
 				name: 'jmapPacketBasicAuthApi',
@@ -108,7 +108,7 @@ export class JmapPushTrigger implements INodeType {
 				name: 'simple',
 				type: 'boolean',
 				default: true,
-				description: 'Whether to return a simplified version of the email data',
+				description: 'Whether to return a simplified version of the response instead of the raw data',
 			},
 			{
 				displayName: 'Filters',

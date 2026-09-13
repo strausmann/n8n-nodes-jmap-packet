@@ -11,7 +11,7 @@ import type {
  */
 export class JmapBearerTokenApi implements ICredentialType {
 	name = 'jmapPacketBearerTokenApi';
-	displayName = 'JMAP Bearer Token API (Packet)';
+	displayName = 'JMAP Bearer Token (Packet) API';
 	documentationUrl = 'https://jmap.io/spec-core.html';
 
 	icon: Icon = {

@@ -6,7 +6,6 @@ import {
 	INodeType,
 	INodeTypeDescription,
 	IPollFunctions,
-	NodeConnectionTypes,
 } from 'n8n-workflow';
 
 import {
@@ -20,7 +19,7 @@ import {
 
 export class JmapTrigger implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'JMAP Trigger (Packet)',
+		displayName: 'JMAP (Packet) Trigger',
 		name: 'jmapTrigger',
 		icon: 'file:jmap.svg',
 		group: ['trigger'],
@@ -31,7 +30,7 @@ export class JmapTrigger implements INodeType {
 			name: 'JMAP Trigger',
 		},
 		inputs: [],
-		outputs: [NodeConnectionTypes.Main],
+		outputs: ['main'],
 		credentials: [
 			{
 				name: 'jmapPacketBasicAuthApi',
@@ -105,7 +104,7 @@ export class JmapTrigger implements INodeType {
 				required: true,
 			},
 			{
-				displayName: 'Mailbox',
+				displayName: 'Mailbox Name or ID',
 				name: 'mailbox',
 				type: 'options',
 				typeOptions: {
@@ -117,14 +116,14 @@ export class JmapTrigger implements INodeType {
 					},
 				},
 				default: '',
-				description: 'The mailbox to monitor for new emails',
+				description: 'The mailbox to monitor for new emails. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			{
-				displayName: 'Simple Output',
+				displayName: 'Simplify',
 				name: 'simple',
 				type: 'boolean',
 				default: true,
-				description: 'Whether to return a simplified version of the email data',
+				description: 'Whether to return a simplified version of the response instead of the raw data',
 			},
 			{
 				displayName: 'Filters',

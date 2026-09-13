@@ -11,7 +11,7 @@ import type {
  */
 export class JmapBasicAuthApi implements ICredentialType {
 	name = 'jmapPacketBasicAuthApi';
-	displayName = 'JMAP Basic Auth API (Packet)';
+	displayName = 'JMAP Basic Auth (Packet) API';
 	documentationUrl = 'https://jmap.io/spec-core.html';
 
 	icon: Icon = {

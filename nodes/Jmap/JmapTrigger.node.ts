@@ -14,6 +14,7 @@ import {
 	getMailboxes,
 	queryEmails,
 	getEmails,
+	buildEmailFilter,
 } from './GenericFunctions';
 
 export class JmapTrigger implements INodeType {
@@ -125,6 +126,70 @@ export class JmapTrigger implements INodeType {
 				description: 'Whether to return a simplified version of the email data',
 			},
 			{
+				displayName: 'Filters',
+				name: 'filters',
+				type: 'collection',
+				placeholder: 'Add Filter',
+				default: {},
+				description:
+					'Only trigger on emails matching these conditions. Without a filter the trigger fires on every new email.',
+				options: [
+					{
+						displayName: 'Flagged Only',
+						name: 'flaggedOnly',
+						type: 'boolean',
+						default: false,
+						description: 'Whether to trigger only on flagged/starred emails',
+					},
+					{
+						displayName: 'From Contains',
+						name: 'from',
+						type: 'string',
+						default: '',
+						placeholder: 'sender@example.com',
+						description: 'Trigger only on emails where the From address contains this text',
+					},
+					{
+						displayName: 'Full Text Search',
+						name: 'text',
+						type: 'string',
+						default: '',
+						placeholder: 'search terms',
+						description: 'Trigger only on emails matching this text in subject, body or addresses',
+					},
+					{
+						displayName: 'Has Attachment',
+						name: 'hasAttachment',
+						type: 'boolean',
+						default: false,
+						description: 'Whether to trigger only on emails that have attachments',
+					},
+					{
+						displayName: 'Subject Contains',
+						name: 'subject',
+						type: 'string',
+						default: '',
+						description: 'Trigger only on emails where the subject contains this text',
+					},
+					{
+						displayName: 'To Contains',
+						name: 'to',
+						type: 'string',
+						default: '',
+						placeholder: 'user+tag@example.com',
+						description:
+							'Trigger only on emails addressed to this recipient. Useful for sub-addressing — give the full address (e.g. user+invoices@example.com), since matching happens server-side and a bare fragment such as "+invoices" may not match.',
+					},
+					{
+						displayName: 'Unread Only',
+						name: 'unreadOnly',
+						type: 'boolean',
+						default: false,
+						description: 'Whether to trigger only on emails that are still unread',
+					},
+				],
+			},
+			{
 				displayName: 'Options',
 				name: 'options',
 				type: 'collection',
@@ -169,6 +234,7 @@ export class JmapTrigger implements INodeType {
 		const event = this.getNodeParameter('event') as string;
 		const simple = this.getNodeParameter('simple') as boolean;
 		const options = this.getNodeParameter('options') as IDataObject;
+		const filters = this.getNodeParameter('filters', {}) as IDataObject;
 
 		// Get the last processed email timestamp
 		const lastProcessedTime = webhookData.lastProcessedTime as string | undefined;
@@ -184,7 +250,11 @@ export class JmapTrigger implements INodeType {
 			filter.inMailbox = mailbox;
 		}
 
-		// If we have a last processed time, only get emails after that
+		// User-defined conditions (From/To/Subject/unread/...)
+		buildEmailFilter(filters, filter);
+
+		// If we have a last processed time, only get emails after that.
+		// Set last so the poll window always wins over a user-supplied date.
 		if (lastProcessedTime) {
 			filter.after = lastProcessedTime;
 		}

@@ -119,6 +119,50 @@ async function makeJmapRequest(
 const sessionCache = new WeakMap<object, IJmapSession>();
 
 /**
+ * Builds an Email/query filter from the shared option collection used by the
+ * Jmap node's "Get Many" operation and by the trigger.
+ *
+ * Pass any already-known conditions (such as `inMailbox`) in `filter`; they are
+ * kept and extended.
+ */
+export function buildEmailFilter(options: IDataObject, filter: IDataObject = {}): IDataObject {
+	// Date filters
+	if (options.after) {
+		filter.after = new Date(options.after as string).toISOString();
+	}
+	if (options.before) {
+		filter.before = new Date(options.before as string).toISOString();
+	}
+
+	// Content filters
+	if (options.from) {
+		filter.from = options.from;
+	}
+	if (options.to) {
+		filter.to = options.to;
+	}
+	if (options.subject) {
+		filter.subject = options.subject;
+	}
+	if (options.text) {
+		filter.text = options.text;
+	}
+
+	// Boolean filters
+	if (options.hasAttachment) {
+		filter.hasAttachment = true;
+	}
+	if (options.unreadOnly) {
+		filter.notKeyword = '$seen';
+	}
+	if (options.flaggedOnly) {
+		filter.hasKeyword = '$flagged';
+	}
+
+	return filter;
+}
+
+/**
  * Get JMAP session from the server
  */
 export async function getJmapSession(

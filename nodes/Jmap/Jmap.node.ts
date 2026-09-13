@@ -27,6 +27,7 @@ import {
 	getThreads,
 	getAttachments,
 	IAttachmentOptions,
+	buildEmailFilter,
 } from './GenericFunctions';
 
 export class Jmap implements INodeType {
@@ -812,45 +813,7 @@ export class Jmap implements INodeType {
 						const limit = this.getNodeParameter('limit', i) as number;
 						const options = this.getNodeParameter('getManyOptions', i) as IDataObject;
 
-						const filter: IDataObject = {};
-
-						// Mailbox filter
-						if (mailbox) {
-							filter.inMailbox = mailbox;
-						}
-
-						// Date filters
-						if (options.after) {
-							filter.after = new Date(options.after as string).toISOString();
-						}
-						if (options.before) {
-							filter.before = new Date(options.before as string).toISOString();
-						}
-
-						// Content filters
-						if (options.from) {
-							filter.from = options.from;
-						}
-						if (options.to) {
-							filter.to = options.to;
-						}
-						if (options.subject) {
-							filter.subject = options.subject;
-						}
-						if (options.text) {
-							filter.text = options.text;
-						}
-
-						// Boolean filters
-						if (options.hasAttachment) {
-							filter.hasAttachment = true;
-						}
-						if (options.unreadOnly) {
-							filter.notKeyword = '$seen';
-						}
-						if (options.flaggedOnly) {
-							filter.hasKeyword = '$flagged';
-						}
+						const filter = buildEmailFilter(options, mailbox ? { inMailbox: mailbox } : {});
 
 						const { ids } = await queryEmails.call(
 							this,

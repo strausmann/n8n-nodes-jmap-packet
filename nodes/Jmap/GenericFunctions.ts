@@ -69,14 +69,21 @@ async function getServerUrl(
 ): Promise<string> {
 	const authType = getAuthType(context);
 
+	let serverUrl: string;
+
 	if (authType === 'jmapPacketOAuth2Api') {
 		const credentials = await context.getCredentials('jmapPacketOAuth2Api');
-		return (credentials.jmapServerUrl as string).replace(/\/$/, '');
+		serverUrl = (credentials.jmapServerUrl as string).replace(/\/$/, '');
 	} else {
 		// Both jmapPacketBasicAuthApi and jmapPacketBearerTokenApi use 'serverUrl'
 		const credentials = await context.getCredentials(authType);
-		return (credentials.serverUrl as string).replace(/\/$/, '');
+		serverUrl = (credentials.serverUrl as string).replace(/\/$/, '');
 	}
+
+	// Checked here because every path to the server runs through this function.
+	assertSecureServerUrl(context, serverUrl);
+
+	return serverUrl;
 }
 
 /**
@@ -179,6 +186,7 @@ export async function getJmapSession(
 		sessionCache.set(this, session);
 		return session;
 	} catch (error) {
+		if (error instanceof NodeOperationError) throw error;
 		throw new NodeApiError(this.getNode(), error as JsonObject, {
 			message: 'Failed to get JMAP session',
 		});
@@ -223,6 +231,51 @@ function resolveSameOrigin(candidate: string, serverUrl: string): string | null 
 	}
 
 	return resolved.toString();
+}
+
+/**
+ * Rejects a server URL that would carry the credential in the clear.
+ *
+ * Discovery is the moment the server gets to say where everything else lives.
+ * Over plain HTTP anyone on the path can rewrite that answer, and they can read
+ * the credential off the wire while they are at it. Requiring TLS is what makes
+ * the origin check above mean anything: without it, the origin is whatever an
+ * on-path attacker decides it is.
+ *
+ * Localhost is exempt. Developing against a local JMAP server over http is
+ * normal and carries no on-path attacker worth the name.
+ */
+function assertSecureServerUrl(
+	context: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
+	serverUrl: string,
+): void {
+	let parsed: URL;
+
+	try {
+		parsed = new URL(serverUrl);
+	} catch {
+		throw new NodeOperationError(
+			context.getNode(),
+			`The JMAP server URL is not a valid URL: ${serverUrl}`,
+		);
+	}
+
+	const isLoopback =
+		parsed.hostname === 'localhost' ||
+		parsed.hostname === '127.0.0.1' ||
+		parsed.hostname === '[::1]' ||
+		parsed.hostname === '::1';
+
+	if (parsed.protocol !== 'https:' && !isLoopback) {
+		throw new NodeOperationError(
+			context.getNode(),
+			`The JMAP server URL must use https. Discovery decides where every later request goes, and over ${parsed.protocol}// anyone on the network path can redirect those requests and read your credentials in transit.`,
+			{
+				description:
+					'Use an https URL for the server. Plain http is only accepted for localhost during development.',
+			},
+		);
+	}
 }
 
 /**
@@ -275,6 +328,10 @@ export async function jmapApiRequest(
 		const response = await makeJmapRequest(this, 'POST', apiUrl, body as unknown as IDataObject);
 		return response as unknown as IJmapResponse;
 	} catch (error) {
+		// Our own errors say what is actually wrong — a misconfigured scheme, a
+		// refused download target. Wrapping them as an API failure sends the
+		// operator looking at the server instead of at the setting.
+		if (error instanceof NodeOperationError) throw error;
 		throw new NodeApiError(this.getNode(), error as JsonObject, {
 			message: 'JMAP API request failed',
 		});

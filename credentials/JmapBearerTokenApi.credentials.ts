@@ -10,8 +10,8 @@ import type {
  * JMAP API Credentials for Bearer Token authentication
  */
 export class JmapBearerTokenApi implements ICredentialType {
-	name = 'jmapBearerTokenApi';
-	displayName = 'JMAP Bearer Token API';
+	name = 'strausmannJmapBearerTokenApi';
+	displayName = 'JMAP Bearer Token API (Strausmann)';
 	documentationUrl = 'https://jmap.io/spec-core.html';
 
 	icon: Icon = {

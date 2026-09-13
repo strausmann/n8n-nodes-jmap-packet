@@ -15,6 +15,7 @@ import {
 	queryEmails,
 	getEmails,
 	buildEmailFilter,
+	updateEmailKeywords,
 } from './GenericFunctions';
 
 export class JmapTrigger implements INodeType {
@@ -208,7 +209,16 @@ export class JmapTrigger implements INodeType {
 						name: 'markAsRead',
 						type: 'boolean',
 						default: false,
-						description: 'Whether to mark fetched emails as read',
+						description:
+							'Whether to mark the fetched emails as read. Applied after they have been handed to the workflow, so a failure further down leaves them unread and they are retried.',
+					},
+					{
+						displayName: 'Process Existing Mail on First Activation',
+						name: 'processBacklogOnFirstRun',
+						type: 'boolean',
+						default: false,
+						description:
+							'Whether the first poll after activation should emit mail that was already in the mailbox. Off by default: the trigger starts watching from the moment it is activated. Turning this on emits the existing backlog as if it had just arrived, which a mutating downstream node will act on for every single message.',
 					},
 				],
 			},
@@ -253,20 +263,59 @@ export class JmapTrigger implements INodeType {
 		// User-defined conditions (From/To/Subject/unread/...)
 		buildEmailFilter(filters, filter);
 
-		// If we have a last processed time, only get emails after that.
+		// First activation: start watching from now unless the operator asked for
+		// the backlog.
+		//
+		// Without this the first poll has no watermark, so it matches everything
+		// in the mailbox and emits it as if it had just arrived. Where the trigger
+		// feeds something that acts — a reply, a forward, a ticket — that is one
+		// action per existing message, in one burst, from a workflow that was
+		// merely switched on.
+		if (!lastProcessedTime && !options.processBacklogOnFirstRun) {
+			const startedWatchingAt = new Date().toISOString();
+			webhookData.lastProcessedTime = startedWatchingAt;
+			webhookData.lastProcessedIds = [];
+			return null;
+		}
+
 		// Set last so the poll window always wins over a user-supplied date.
 		if (lastProcessedTime) {
 			filter.after = lastProcessedTime;
 		}
 
-		// Query for new emails
-		const { ids } = await queryEmails.call(
-			this,
-			accountId,
-			filter,
-			[{ property: 'receivedAt', isAscending: false }],
-			100,
-		);
+		// Oldest first, and paged.
+		//
+		// Sorting newest-first and taking a single capped batch loses mail for
+		// good: the watermark below is taken from the newest item, so anything
+		// that did not fit into the batch ends up *behind* the watermark and can
+		// never satisfy the forward filter again. Oldest-first inverts that —
+		// whatever is not reached this time simply stays ahead of the watermark
+		// and is picked up on the next poll.
+		//
+		// Paging then lets a backlog drain over a few polls instead of one item
+		// per cycle, bounded so a large mailbox cannot stall the poll.
+		const PAGE_SIZE = 100;
+		const MAX_PER_POLL = 500;
+
+		const ids: string[] = [];
+		let position = 0;
+
+		for (;;) {
+			const page = await queryEmails.call(
+				this,
+				accountId,
+				filter,
+				[{ property: 'receivedAt', isAscending: true }],
+				PAGE_SIZE,
+				position,
+			);
+
+			ids.push(...page.ids);
+			position += page.ids.length;
+
+			if (page.ids.length === 0 || position >= page.total) break;
+			if (ids.length >= MAX_PER_POLL) break;
+		}
 
 		if (ids.length === 0) {
 			return null;
@@ -315,23 +364,53 @@ export class JmapTrigger implements INodeType {
 			return null;
 		}
 
-		// Update the last processed time to the most recent email
-		const mostRecentEmail = emails[0];
-		webhookData.lastProcessedTime = mostRecentEmail.receivedAt as string;
+		// Drop what was already delivered.
+		//
+		// A timestamp alone cannot carry this. The server-side `after` filter is
+		// inclusive (RFC 8621 section 4.4.1) while a strict `>` here is exclusive,
+		// so two messages sharing a receivedAt — ordinary at second resolution,
+		// and the norm for bulk delivery — leave the second one discarded on
+		// every future poll. The ids seen at the boundary timestamp are therefore
+		// remembered alongside it, and only those are skipped.
+		const lastProcessedIds = new Set((webhookData.lastProcessedIds as string[]) ?? []);
 
-		// Filter out already processed emails if we had a lastProcessedTime
 		let newEmails = emails;
 		if (lastProcessedTime) {
+			const lastTime = new Date(lastProcessedTime).getTime();
 			newEmails = emails.filter((email) => {
 				const emailTime = new Date(email.receivedAt as string).getTime();
-				const lastTime = new Date(lastProcessedTime).getTime();
-				return emailTime > lastTime;
+				if (emailTime > lastTime) return true;
+				if (emailTime < lastTime) return false;
+				// Same instant as the watermark: deliver unless already delivered.
+				return !lastProcessedIds.has(email.id as string);
 			});
 		}
 
 		if (newEmails.length === 0) {
 			return null;
 		}
+
+		// The watermark follows what was actually delivered, not what the query
+		// happened to return, so an interrupted page cannot carry it past unread
+		// mail. Emails are oldest-first, so the last one is the newest delivered.
+		const newestDelivered = newEmails[newEmails.length - 1];
+		const newWatermark = newestDelivered.receivedAt as string;
+		const newWatermarkTime = new Date(newWatermark).getTime();
+
+		const deliveredAtWatermark = newEmails
+			.filter((email) => new Date(email.receivedAt as string).getTime() === newWatermarkTime)
+			.map((email) => email.id as string);
+
+		// When the watermark has not moved, the ids already remembered for that
+		// instant still apply — replacing them would strip their marker and hand
+		// them to the workflow a second time on the next poll.
+		const carriedOver =
+			lastProcessedTime && new Date(lastProcessedTime).getTime() === newWatermarkTime
+				? [...lastProcessedIds]
+				: [];
+
+		webhookData.lastProcessedTime = newWatermark;
+		webhookData.lastProcessedIds = [...new Set([...carriedOver, ...deliveredAtWatermark])];
 
 		// Transform output
 		const returnData: INodeExecutionData[] = newEmails.map((email) => {
@@ -357,6 +436,21 @@ export class JmapTrigger implements INodeType {
 
 			return { json: outputEmail };
 		});
+
+		// Marking happens last, on purpose.
+		//
+		// The option existed in the interface but was never wired to anything:
+		// the operator ticked it and nothing happened. Doing it after the items
+		// are prepared means a failure while fetching leaves the mail unread, so
+		// the next poll sees it again rather than losing it silently.
+		if (options.markAsRead) {
+			for (const email of newEmails) {
+				await updateEmailKeywords.call(this, accountId, email.id as string, {
+					...((email.keywords as IDataObject) ?? {}),
+					$seen: true,
+				});
+			}
+		}
 
 		return [returnData];
 	}

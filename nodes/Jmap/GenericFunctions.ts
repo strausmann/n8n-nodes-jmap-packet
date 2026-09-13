@@ -533,7 +533,7 @@ export async function getIdentities(
  * Update email keywords
  */
 export async function updateEmailKeywords(
-	this: IExecuteFunctions,
+	this: IExecuteFunctions | IPollFunctions,
 	accountId: string,
 	emailId: string,
 	keywords: IDataObject,

@@ -70,16 +70,18 @@ describe('jmapApiRequest endpoint resolution', () => {
 	});
 });
 
-describe('jmapApiRequest refuses an off-origin apiUrl', () => {
-	// The session tells the client where the next request goes, and that request
-	// carries the credential — n8n attaches it to whatever URL it is handed.
-	// A server naming a foreign origin would therefore have the credential
-	// delivered to it, and could aim the n8n host at addresses only the n8n host
-	// can reach. These cases are the reason resolveSameOrigin exists.
+describe('jmapApiRequest follows the session across hosts', () => {
+	// Deliberately not origin-checked. RFC 8620 section 2 provides for a domain
+	// pointing at a provider on another host, so refusing a foreign apiUrl would
+	// break the discovery path the fix exists to support. The trust boundary is
+	// TLS on the configured server — see serverUrlScheme.test.ts — and a server
+	// that already holds the credential gains nothing by redirecting. Reaching
+	// internal addresses is left to n8n's own SSRF protection, which is where a
+	// platform-wide control belongs.
 
-	it('falls back to the configured URL when the session names another host', async () => {
+	it('uses an apiUrl on another host, as autodiscovery requires', async () => {
 		const ctx = makeContext({
-			apiUrl: 'https://attacker.example/collect',
+			apiUrl: 'https://api.provider.example/jmap/',
 			accounts: {},
 			primaryAccounts: {},
 		});
@@ -87,60 +89,6 @@ describe('jmapApiRequest refuses an off-origin apiUrl', () => {
 		await jmapApiRequest.call(ctx as any, [['Core/echo', {}, 'c0']]);
 
 		const post = ctx.calls.find((c) => c.method === 'POST');
-		expect(post?.url).not.toContain('attacker.example');
-		expect(post?.url).toBe(SERVER);
-	});
-
-	it('refuses a protocol-relative apiUrl, which also replaces the host', async () => {
-		const ctx = makeContext({
-			apiUrl: '//attacker.example/collect',
-			accounts: {},
-			primaryAccounts: {},
-		});
-
-		await jmapApiRequest.call(ctx as any, [['Core/echo', {}, 'c0']]);
-
-		const post = ctx.calls.find((c) => c.method === 'POST');
-		expect(post?.url).not.toContain('attacker.example');
-		expect(post?.url).toBe(SERVER);
-	});
-
-	it('refuses a different scheme on the same host', async () => {
-		const ctx = makeContext({
-			apiUrl: 'http://mail.example.com/jmap/',
-			accounts: {},
-			primaryAccounts: {},
-		});
-
-		await jmapApiRequest.call(ctx as any, [['Core/echo', {}, 'c0']]);
-
-		const post = ctx.calls.find((c) => c.method === 'POST');
-		expect(post?.url).toBe(SERVER);
-	});
-
-	it('refuses an apiUrl on a different port of the same host', async () => {
-		const ctx = makeContext({
-			apiUrl: 'https://mail.example.com:8443/jmap/',
-			accounts: {},
-			primaryAccounts: {},
-		});
-
-		await jmapApiRequest.call(ctx as any, [['Core/echo', {}, 'c0']]);
-
-		const post = ctx.calls.find((c) => c.method === 'POST');
-		expect(post?.url).toBe(SERVER);
-	});
-
-	it('still accepts a same-origin apiUrl on another path — the case the fix exists for', async () => {
-		const ctx = makeContext({
-			apiUrl: 'https://mail.example.com/jmap/',
-			accounts: {},
-			primaryAccounts: {},
-		});
-
-		await jmapApiRequest.call(ctx as any, [['Core/echo', {}, 'c0']]);
-
-		const post = ctx.calls.find((c) => c.method === 'POST');
-		expect(post?.url).toBe('https://mail.example.com/jmap/');
+		expect(post?.url).toBe('https://api.provider.example/jmap/');
 	});
 });

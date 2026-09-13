@@ -120,6 +120,28 @@ Scope:             openid email profile offline_access
 
 ---
 
+## Transport security
+
+**The server URL must use `https`.** A credential pointing at `http://` is refused, with the
+single exception of loopback addresses so local development keeps working.
+
+This is not a formality. The session resource is where the server tells the client where
+everything else lives — the API endpoint, the download endpoint. Over plain HTTP anyone on the
+network path can rewrite that answer and point the node somewhere else, and can read the
+credential off the wire while they are at it. There is nothing a client can do about either,
+which is why discovery over HTTP is not supported at all rather than supported with caveats.
+
+Over `https` the node follows what the session says, including an `apiUrl` or `downloadUrl` on a
+different host. That is deliberate: RFC 8620 section 2 provides for a domain pointing at a
+provider elsewhere, and refusing it would break ordinary autodiscovery. The trust boundary is the
+TLS connection to the server the credential belongs to — a server that already holds your
+credential gains nothing by naming another address.
+
+Restricting which addresses n8n may reach at all — internal ranges, metadata endpoints — is a
+platform-level control, not something an individual node should reimplement. n8n has one:
+`N8N_SSRF_PROTECTION_ENABLED=true`. It is off by default so that self-hosted instances can keep
+calling internal services; turn it on if your n8n talks to services on the public internet.
+
 ## Nodes
 
 ### JMAP Node

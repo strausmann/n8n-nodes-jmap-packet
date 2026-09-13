@@ -1,8 +1,15 @@
 name: renovate
 
 on:
-  schedule:
-    - cron: "0 2 * * *" # before release.yml at 03:00, so fresh deps make it into the release
+  # The nightly schedule stays commented out until INFISICAL_CLIENT_ID and
+  # INFISICAL_CLIENT_SECRET exist as repository secrets. Enabling it before
+  # then would fail every night for a reason that is not a defect, and a job
+  # that cries wolf gets ignored when it finally means something.
+  # Once the secrets are set, uncomment these two lines: 02:00 puts Renovate
+  # an hour ahead of release.yml, so fresh dependencies reach the same night's
+  # release.
+  # schedule:
+  #   - cron: "0 2 * * *"
   workflow_dispatch: {}
 
 permissions:

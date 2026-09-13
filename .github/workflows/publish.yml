@@ -3,21 +3,30 @@ name: Publish to npm
 on:
   release:
     types: [published]
+  workflow_dispatch: {}
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+      id-token: write        # npm provenance + OIDC trusted publishing
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Upgrade npm for OIDC trusted publishing
+        # Node 22 ships npm 10.x; OIDC trusted publishing on npmjs.com needs npm >= 11.5.1.
+        # Harmless when publishing with NPM_TOKEN, required when publishing tokenless.
+        run: npm install -g npm@latest
+
       - run: npm ci
+      - run: npm run lint
       - run: npm run build
+
       - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

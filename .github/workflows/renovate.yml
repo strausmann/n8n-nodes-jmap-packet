@@ -1,0 +1,33 @@
+name: renovate
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # before release.yml at 03:00, so fresh deps make it into the release
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Fetch RENOVATE_TOKEN from Infisical
+        uses: Infisical/secrets-action@v1.0.17
+        with:
+          method: universal
+          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
+          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+          project-slug: fileee-server-ci
+          env-slug: prod
+          secret-path: /
+          domain: https://secretsmanager.strausmann.cloud
+
+      - uses: renovatebot/github-action@v46.3.0
+        with:
+          token: ${{ env.RENOVATE_TOKEN }}
+          configurationFile: renovate.json
+        env:
+          RENOVATE_REPOSITORIES: ${{ github.repository }}

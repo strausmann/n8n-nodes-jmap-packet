@@ -57,7 +57,7 @@ function getAuthType(context: IExecuteFunctions | ILoadOptionsFunctions | IPollF
 	try {
 		return context.getNodeParameter('authentication', 0) as string;
 	} catch {
-		return 'strausmannJmapOAuth2Api'; // Default to OAuth2
+		return 'jmapPacketOAuth2Api'; // Default to OAuth2
 	}
 }
 
@@ -69,11 +69,11 @@ async function getServerUrl(
 ): Promise<string> {
 	const authType = getAuthType(context);
 
-	if (authType === 'strausmannJmapOAuth2Api') {
-		const credentials = await context.getCredentials('strausmannJmapOAuth2Api');
+	if (authType === 'jmapPacketOAuth2Api') {
+		const credentials = await context.getCredentials('jmapPacketOAuth2Api');
 		return (credentials.jmapServerUrl as string).replace(/\/$/, '');
 	} else {
-		// Both strausmannJmapBasicAuthApi and strausmannJmapBearerTokenApi use 'serverUrl'
+		// Both jmapPacketBasicAuthApi and jmapPacketBearerTokenApi use 'serverUrl'
 		const credentials = await context.getCredentials(authType);
 		return (credentials.serverUrl as string).replace(/\/$/, '');
 	}

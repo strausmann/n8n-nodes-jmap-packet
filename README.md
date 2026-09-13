@@ -1,13 +1,25 @@
-# n8n-nodes-jmap
+# n8n-nodes-jmap-packet
 
-Community node for [n8n](https://n8n.io/) to interact with JMAP email servers ([RFC 8620](https://datatracker.ietf.org/doc/html/rfc8620)/[RFC 8621](https://datatracker.ietf.org/doc/html/rfc8621)).
+JMAP nodes for n8n — mail, mailboxes and threads over JMAP
+([RFC 8620](https://datatracker.ietf.org/doc/html/rfc8620) /
+[RFC 8621](https://datatracker.ietf.org/doc/html/rfc8621)).
+Tested against Stalwart; also works with Apache James, Twake Mail and Fastmail.
 
-Compatible with:
-- [Apache James](https://james.apache.org/)
-- [Twake Mail](https://twake.app/) by [LINAGORA](https://linagora.com/)
-- [Stalwart Mail Server](https://stalw.art/)
-- [Fastmail](https://www.fastmail.com/)
-- Any JMAP-compliant email server
+> **Based on [`n8n-nodes-jmap`](https://github.com/mmaudet/n8n-nodes-jmap) by Michel-Marie Maudet
+> (LINAGORA), MIT licensed.** This package carries two fixes that are also offered upstream as
+> [PR #18](https://github.com/mmaudet/n8n-nodes-jmap/pull/18) and
+> [PR #19](https://github.com/mmaudet/n8n-nodes-jmap/pull/19); it exists so they can be used
+> before those land, and installs alongside the original rather than replacing it.
+
+## What differs from the original
+
+- **Method calls go to the session's `apiUrl`** instead of the configured server URL
+  ([issue #17](https://github.com/mmaudet/n8n-nodes-jmap/issues/17)). Without this, a credential
+  pointing at the spec's discovery URL (`/.well-known/jmap`) returns 404 on every method call
+  while the credential test still reports success.
+- **The trigger can filter which emails it fires on** — recipient, sender, subject, full text,
+  attachments, unread, flagged. Previously only the action node could; the trigger fetched up to
+  100 existing messages on its first run.
 
 ## Installation
 

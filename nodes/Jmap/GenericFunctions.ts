@@ -186,6 +186,46 @@ export async function getJmapSession(
 }
 
 /**
+ * Resolves a URL the JMAP server handed us, and refuses it if it leaves the
+ * origin the credential was configured for.
+ *
+ * The session resource tells the client where to send its next request. That
+ * request carries the credential, and n8n attaches it to whatever URL it is
+ * given — there is no host binding anywhere in the platform's credential
+ * injection. A server that names a foreign origin therefore gets the
+ * credential delivered to it, and can also aim the n8n host at addresses only
+ * the n8n host can reach. Neither is something a mail server needs to be able
+ * to do, so the origin is pinned to the configured one.
+ *
+ * RFC 8620 section 3.1 requires the client to *use* apiUrl, and says nothing
+ * about its origin; pinning it is a client-side trust policy, not a deviation
+ * from the spec. Section 8.3 acknowledges the same class of risk one layer up,
+ * at autodiscovery, and stops there.
+ *
+ * Returns null when the URL is unusable or off-origin, so callers fall back to
+ * the configured URL rather than following the server.
+ */
+function resolveSameOrigin(candidate: string, serverUrl: string): string | null {
+	let resolved: URL;
+	let configured: URL;
+
+	try {
+		// A relative value is resolved against the session resource; an absolute
+		// one replaces it entirely, which is exactly the case worth checking.
+		resolved = new URL(candidate, `${serverUrl}/`);
+		configured = new URL(serverUrl);
+	} catch {
+		return null;
+	}
+
+	if (resolved.origin !== configured.origin) {
+		return null;
+	}
+
+	return resolved.toString();
+}
+
+/**
  * Returns the endpoint that JMAP method calls must be sent to.
  *
  * Per RFC 8620 section 2 the session resource advertises `apiUrl`, and clients
@@ -194,8 +234,8 @@ export async function getJmapSession(
  * `/jmap/session` while `apiUrl` is `/jmap`, so a user who configures the spec's
  * discovery URL (`/.well-known/jmap`) gets a 404 on every method call.
  *
- * Falls back to the configured URL when no session can be resolved, so setups
- * that work today keep working.
+ * Falls back to the configured URL when no session can be resolved, or when the
+ * session names an origin other than the configured one.
  */
 async function getApiUrl(
 	context: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
@@ -205,8 +245,10 @@ async function getApiUrl(
 	try {
 		const session = await getJmapSession.call(context);
 		if (session?.apiUrl) {
-			// apiUrl may be given relative to the session resource
-			return new URL(session.apiUrl, `${serverUrl}/`).toString();
+			const apiUrl = resolveSameOrigin(session.apiUrl, serverUrl);
+			if (apiUrl) {
+				return apiUrl;
+			}
 		}
 	} catch {
 		// Session not reachable — fall through to the configured URL below.
@@ -698,12 +740,28 @@ export async function downloadBlob(
 ): Promise<Buffer> {
 	const session = await getJmapSession.call(this);
 	const authType = getAuthType(this);
+	const serverUrl = await getServerUrl(this);
 
-	let downloadUrl = session.downloadUrl
-		.replace('{accountId}', accountId)
-		.replace('{blobId}', blobId)
+	// Every placeholder is escaped, including the server-minted ids: an id
+	// carrying a slash or a query separator would otherwise reshape the path.
+	const filledUrl = session.downloadUrl
+		.replace('{accountId}', encodeURIComponent(accountId))
+		.replace('{blobId}', encodeURIComponent(blobId))
 		.replace('{name}', encodeURIComponent(name))
 		.replace('{type}', encodeURIComponent(type));
+
+	// The download carries the credential just like a method call does, so the
+	// same origin rule applies — see resolveSameOrigin.
+	const downloadUrl = resolveSameOrigin(filledUrl, serverUrl);
+	if (!downloadUrl) {
+		throw new NodeOperationError(
+			this.getNode(),
+			'The JMAP server asked for the attachment to be fetched from a different host than the one configured in the credential. Refusing, because the request would carry your credentials there.',
+			{
+				description: `Configured server: ${serverUrl}. Refused download target: ${filledUrl}`,
+			},
+		);
+	}
 
 	const response = await this.helpers.httpRequestWithAuthentication.call(
 		this,

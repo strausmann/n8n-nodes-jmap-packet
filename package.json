@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-jmap-packet",
-  "version": "1.0.1",
-  "description": "JMAP nodes for n8n \u2014 mail, mailboxes and threads over JMAP (RFC 8620/8621). Works with Stalwart, Apache James, Twake Mail and Fastmail.",
+  "version": "1.1.0",
+  "description": "JMAP nodes for n8n — mail, mailboxes and threads over JMAP (RFC 8620/8621). Works with Stalwart, Apache James, Twake Mail and Fastmail.",
   "keywords": [
     "n8n-community-node-package",
     "jmap",
@@ -17,7 +17,7 @@
   "license": "MIT",
   "homepage": "https://github.com/strausmann/n8n-nodes-jmap-packet",
   "author": {
-    "name": "Bj\u00f6rn Strausmann"
+    "name": "Björn Strausmann"
   },
   "repository": {
     "type": "git",
